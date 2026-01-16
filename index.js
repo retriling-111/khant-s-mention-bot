@@ -3,7 +3,7 @@ const { MongoClient } = require('mongodb');
 const http = require('http');
 
 // --- CONFIGURATION ---
-const TOKEN = '8570903548:AAEGRl-f2lEO74D9Ko3U2ac-2cfhuPI7wSU'; 
+const TOKEN = '8570903548:AAHjO8kFND34kbansmDm_MqlN-hY2ORNwXc'; 
 const MONGO_URI = 'mongodb+srv://khant_developer:talktokhant@cluster0.huf9nc6.mongodb.net/?retryWrites=true&w=majority'; 
 const DB_NAME = 'telegram_bot';
 
