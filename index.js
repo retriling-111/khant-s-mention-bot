@@ -13,7 +13,6 @@ if (!fs.existsSync(DATA_FILE)) {
 }
 
 // --- KOYEB HEALTH CHECK SERVER ---
-// Koyeb က Bot ကို ပိတ်မချအောင် Port 8000 (သို့မဟုတ် assigned port) မှာ နားထောင်ပေးခြင်း
 http.createServer((req, res) => {
     res.writeHead(200, { 'Content-Type': 'text/plain' });
     res.write('Bot is alive and running!');
@@ -56,21 +55,22 @@ const saveMember = async (chatId, user) => {
 
 // 1. စာရိုက်တဲ့သူတွေကို မှတ်သားခြင်း
 bot.on('message', async (ctx, next) => {
-    if (ctx.chat.type !== 'private' && ctx.from) {
+    if (ctx.chat && ctx.chat.type !== 'private' && ctx.from) {
         await saveMember(ctx.chat.id, ctx.from);
     }
     return next();
 });
 
-bot.start((ctx) => ctx.reply('✅ Mention Bot is Online!\nGroup ထဲမှာ /all [စာသား] လို့ ရိုက်ပြီး သုံးနိုင်ပါတယ်။'));
+bot.start((ctx) => ctx.reply('✅ Mention Bot is Online!\nGroup ထဲမှာ /all သို့မဟုတ် @all သို့မဟုတ် .all [စာသား] လို့ ရိုက်ပြီး သုံးနိုင်ပါတယ်။'));
 
-// 2. Mention / All Command
-bot.hears([/^\/all/, /^@all/], async (ctx) => {
+// 2. Mention Commands ( /all , @all , .all )
+bot.hears([/^\/all/, /^@all/, /^\.all/], async (ctx) => {
     if (ctx.chat.type === 'private') return ctx.reply('❌ ဤ Command သည် Group များတွင်သာ အလုပ်လုပ်ပါသည်။');
 
     try {
         const chatId = ctx.chat.id;
-        const userMessage = ctx.message.text.replace(/\/all|@all/i, '').trim();
+        // Trigger word များကို ဖယ်ထုတ်ပြီး message text သီးသန့်ယူခြင်း
+        const userMessage = ctx.message.text.replace(/^(\/all|@all|\.all)/i, '').trim();
         
         const learnedMembers = await getMembers(chatId);
         const admins = await ctx.getChatAdministrators();
