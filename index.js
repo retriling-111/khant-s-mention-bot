@@ -3,7 +3,7 @@ const fs = require('fs-extra');
 const http = require('http');
 
 // --- CONFIGURATION ---
-const TOKEN = '8570903548:AAGWvfShwxjS0_QfNQoJ5dhFnKKdcMzgrEM'; 
+const TOKEN = '8570903548:AAEGRl-f2lEO74D9Ko3U2ac-2cfhuPI7wSU'; 
 const DATA_FILE = './members.json';
 const bot = new Telegraf(TOKEN);
 
