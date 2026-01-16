@@ -4,7 +4,6 @@ const http = require('http');
 
 // --- CONFIGURATION ---
 const TOKEN = '8570903548:AAEGRl-f2lEO74D9Ko3U2ac-2cfhuPI7wSU'; 
-// MongoDB URI ကို တည်ငြိမ်တဲ့ parameter များနဲ့ အစားထိုးထားပါတယ်
 const MONGO_URI = 'mongodb+srv://khant_developer:talktokhant@cluster0.huf9nc6.mongodb.net/?retryWrites=true&w=majority'; 
 const DB_NAME = 'telegram_bot';
 
@@ -21,8 +20,7 @@ async function connectDB() {
         console.log('✅ Connected to MongoDB Successfully!');
     } catch (err) {
         console.error('❌ MongoDB Connection Error:', err.message);
-        // Database မချိတ်မိဘဲ Bot ကို ဆက်မပွင့်စေရန်
-        process.exit(1);
+        process.exit(1); 
     }
 }
 
@@ -37,7 +35,11 @@ http.createServer((req, res) => {
 
 // --- ERROR HANDLING ---
 bot.catch((err, ctx) => {
-    console.error(`❌ Bot Error (${ctx.updateType}):`, err.message);
+    if (err.response && err.response.error_code === 409) {
+        console.error('⚠️ Conflict Error: Bot က တခြားတစ်နေရာမှာ ပွင့်နေပါတယ်။');
+    } else {
+        console.error(`❌ Bot Error (${ctx.updateType}):`, err.message);
+    }
 });
 
 // --- DATABASE FUNCTIONS ---
@@ -54,13 +56,13 @@ const getMembers = async (chatId) => {
 const saveMember = async (chatId, user) => {
     if (!user || user.is_bot) return;
     try {
-        // လူသစ်ဆိုရင် $addToSet က ထပ်မတိုးအောင် တားပေးပါတယ်
-        // $each ကိုသုံးပြီး Object ပုံစံတူရင် ထပ်မဝင်အောင် လုပ်ထားပါတယ်
+        console.log(`📩 မှတ်သားနေသည်: ${user.first_name} (ID: ${user.id}) in Chat: ${chatId}`);
         await membersColl.updateOne(
             { chatId: chatId },
             { $addToSet: { users: { id: user.id, name: user.first_name } } },
             { upsert: true }
         );
+        console.log(`✅ ${user.first_name} ကို Database ထဲ သိမ်းဆည်းပြီးပါပြီ။`);
     } catch (err) {
         console.error("💾 Save Error:", err.message);
     }
@@ -80,7 +82,7 @@ const removeMember = async (chatId, userId) => {
 
 // --- BOT LOGIC ---
 
-// 1. စာရိုက်တဲ့သူတိုင်းကို မှတ်သားခြင်း
+// 1. စာရိုက်သူတိုင်းကို Database ထဲသိမ်းခြင်း
 bot.on('message', async (ctx, next) => {
     if (ctx.chat && ctx.chat.type !== 'private' && ctx.from) {
         await saveMember(ctx.chat.id, ctx.from);
@@ -88,7 +90,7 @@ bot.on('message', async (ctx, next) => {
     return next();
 });
 
-// 2. Automatic Cleanup (လူထွက်သွားရင် စာရင်းမှဖျက်ခြင်း)
+// 2. လူထွက်သွားလျှင် စာရင်းမှဖျက်ခြင်း
 bot.on('left_chat_member', async (ctx) => {
     try {
         const userId = ctx.message.left_chat_member.id;
@@ -107,13 +109,11 @@ bot.hears([/^\/all/, /^@all/, /^\.all/], async (ctx) => {
 
     try {
         const chatId = ctx.chat.id;
-        // Trigger ကိုဖယ်ပြီး message ယူခြင်း
         const userMessage = ctx.message.text.replace(/^(\/all|@all|\.all)/i, '').trim();
         
         const learnedMembers = await getMembers(chatId);
         const admins = await ctx.getChatAdministrators();
         
-        // Admin များနှင့် Member စာရင်းကို Unique ဖြစ်အောင် ပေါင်းခြင်း
         let fullList = [...learnedMembers];
         admins.forEach(admin => {
             if (!admin.user.is_bot && !fullList.some(m => m.id === admin.user.id)) {
@@ -122,13 +122,12 @@ bot.hears([/^\/all/, /^@all/, /^\.all/], async (ctx) => {
         });
 
         if (fullList.length === 0) {
-            return ctx.reply("I haven't learned any members yet. စာအရင်ပို့ခိုင်းပါ။");
+            return ctx.reply("စာရင်းထဲမှာ ဘယ်သူမှ မရှိသေးပါဘူး။ လူတွေကို စာအရင်ပို့ခိုင်းပါ။");
         }
 
         let header = `📢 **Attention Everyone!**\n`;
         if (userMessage) header += `📝 ${userMessage}\n\n`;
 
-        // တစ်ခါပို့ရင် ၅ ယောက်နှုန်းခွဲပို့ခြင်း
         for (let i = 0; i < fullList.length; i += 5) {
             const chunk = fullList.slice(i, i + 5);
             const mentionString = chunk
@@ -137,10 +136,8 @@ bot.hears([/^\/all/, /^@all/, /^\.all/], async (ctx) => {
             
             const textToSend = (i === 0) ? (header + mentionString) : mentionString;
             
-            // စာသားပို့ရာတွင် markdown အမှားမတက်စေရန် catch ခံထားပါတယ်
             await ctx.replyWithMarkdown(textToSend).catch(e => {
-                console.error("Markdown Error:", e.message);
-                ctx.reply(textToSend.replace(/[\[\]()]/g, '')); // markdown မရရင် plain text နဲ့ပို့
+                ctx.reply(textToSend.replace(/[\[\]()]/g, ''));
             });
         }
 
@@ -154,9 +151,14 @@ bot.hears([/^\/all/, /^@all/, /^\.all/], async (ctx) => {
 connectDB().then(() => {
     bot.launch()
         .then(() => console.log('🚀 Telegram Bot is connected and ready!'))
-        .catch((err) => console.error('❌ Launch Failed:', err.message));
+        .catch((err) => {
+            if (err.message.includes('409')) {
+                console.error('❌ Launch Failed: တခြားနေရာမှာ Bot ပွင့်နေလို့ Conflict ဖြစ်နေပါတယ်။ Laptop က Bot ကို ပိတ်လိုက်ပါ။');
+            } else {
+                console.error('❌ Launch Failed:', err.message);
+            }
+        });
 });
 
-// ပုံမှန်အတိုင်း ပိတ်နိုင်အောင် လုပ်ခြင်း
 process.once('SIGINT', () => bot.stop('SIGINT'));
 process.once('SIGTERM', () => bot.stop('SIGTERM'));
