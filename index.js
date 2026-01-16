@@ -1,19 +1,28 @@
 const { Telegraf } = require('telegraf');
 const fs = require('fs-extra');
+const http = require('http');
 
 // --- CONFIGURATION ---
-// သတိပေးချက် - Token ကို လုံခြုံအောင် ထားပါ။ Revoke လုပ်ပြီး အသစ်လဲဖို့ အကြံပြုပါတယ်။
 const TOKEN = '8570903548:AAGWvfShwxjS0_QfNQoJ5dhFnKKdcMzgrEM'; 
 const DATA_FILE = './members.json';
 const bot = new Telegraf(TOKEN);
 
-// Database file (JSON) ရှိမရှိ စစ်ဆေးပြီး မရှိရင် အသစ်ဆောက်မယ်
+// Database file (JSON) စစ်ဆေးခြင်း
 if (!fs.existsSync(DATA_FILE)) {
     fs.writeJsonSync(DATA_FILE, {});
 }
 
+// --- KOYEB HEALTH CHECK SERVER ---
+// Koyeb က Bot ကို ပိတ်မချအောင် Port 8000 (သို့မဟုတ် assigned port) မှာ နားထောင်ပေးခြင်း
+http.createServer((req, res) => {
+    res.writeHead(200, { 'Content-Type': 'text/plain' });
+    res.write('Bot is alive and running!');
+    res.end();
+}).listen(process.env.PORT || 8000, () => {
+    console.log(`📡 Health Check Server is running on port ${process.env.PORT || 8000}`);
+});
+
 // --- ERROR HANDLING ---
-// Network ကျတာဖြစ်ဖြစ်၊ တခြား Error ဖြစ်ဖြစ် Bot ရပ်မသွားအောင် ဖမ်းပေးမယ်
 bot.catch((err, ctx) => {
     console.error(`❌ Bot Error (${ctx.updateType}):`, err.message);
 });
@@ -39,13 +48,13 @@ const saveMember = async (chatId, user) => {
             await fs.writeJson(DATA_FILE, data);
         }
     } catch (err) {
-        console.error("Save Error:", err.message);
+        console.error("💾 Save Error:", err.message);
     }
 };
 
 // --- BOT LOGIC ---
 
-// 1. စာရိုက်တဲ့သူတွေကို မှတ်မယ်
+// 1. စာရိုက်တဲ့သူတွေကို မှတ်သားခြင်း
 bot.on('message', async (ctx, next) => {
     if (ctx.chat.type !== 'private' && ctx.from) {
         await saveMember(ctx.chat.id, ctx.from);
@@ -55,19 +64,18 @@ bot.on('message', async (ctx, next) => {
 
 bot.start((ctx) => ctx.reply('✅ Mention Bot is Online!\nGroup ထဲမှာ /all [စာသား] လို့ ရိုက်ပြီး သုံးနိုင်ပါတယ်။'));
 
-// 2. Mention ခေါ်တဲ့ Command (/all သို့မဟုတ် @all)
+// 2. Mention / All Command
 bot.hears([/^\/all/, /^@all/], async (ctx) => {
     if (ctx.chat.type === 'private') return ctx.reply('❌ ဤ Command သည် Group များတွင်သာ အလုပ်လုပ်ပါသည်။');
 
     try {
         const chatId = ctx.chat.id;
-        // Command နောက်ကပါလာတဲ့ စာသားကို ယူမယ်
         const userMessage = ctx.message.text.replace(/\/all|@all/i, '').trim();
         
         const learnedMembers = await getMembers(chatId);
         const admins = await ctx.getChatAdministrators();
         
-        // Admin ရော Member ရော ပေါင်းမယ် (Duplicate ဖြစ်ရင် ဖယ်မယ်)
+        // Admin နှင့် Member စာရင်း ပေါင်းစည်းခြင်း
         let fullList = [...learnedMembers];
         admins.forEach(admin => {
             if (!admin.user.is_bot && !fullList.some(m => m.id === admin.user.id)) {
@@ -82,30 +90,28 @@ bot.hears([/^\/all/, /^@all/], async (ctx) => {
         let header = `📢 **Attention Everyone!**\n`;
         if (userMessage) header += `📝 ${userMessage}\n\n`;
 
-        // တစ်ခါခေါ်ရင် ၅ ယောက်နှုန်းနဲ့ ခွဲပို့မယ် (Spam filter ရှောင်ရန်)
+        // ၅ ယောက်တစ်တွဲစီ Tag ခေါ်ခြင်း
         for (let i = 0; i < fullList.length; i += 5) {
             const chunk = fullList.slice(i, i + 5);
             const mentionString = chunk
                 .map(u => `[${u.name}](tg://user?id=${u.id})`)
                 .join(' ');
             
-            // ပထမဆုံး Message မှာပဲ Header ထည့်မယ်
             const textToSend = (i === 0) ? (header + mentionString) : mentionString;
             await ctx.replyWithMarkdown(textToSend);
         }
 
     } catch (err) {
-        console.error("Command Error:", err.message);
+        console.error("⚠️ Command Error:", err.message);
         ctx.reply("⚠️ Error: Bot ကို Admin ပေးထားဖို့ လိုအပ်ပါတယ်။");
     }
 });
 
 // --- LAUNCH ---
 bot.launch()
-    .then(() => console.log('🚀 Bot is running successfully! (Make sure VPN is ON)'))
+    .then(() => console.log('🚀 Telegram Bot is connected!'))
     .catch((err) => {
-        console.error('❌ Failed to start:', err.message);
-        console.log('💡 Tip: VPN ဖွင့်ထားရဲ့လား ပြန်စစ်ကြည့်ပါ။');
+        console.error('❌ Launch Failed:', err.message);
     });
 
 // ပုံမှန်အတိုင်း ပိတ်နိုင်အောင် လုပ်ခြင်း
